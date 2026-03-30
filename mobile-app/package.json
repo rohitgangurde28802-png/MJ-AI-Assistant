@@ -1,0 +1,16 @@
+{
+  "name": "mj-ai-assistant-mobile",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "start": "npx react-native start",
+    "android": "npx react-native run-android",
+    "ios": "npx react-native run-ios"
+  },
+  "dependencies": {
+    "react": "18.2.0",
+    "react-native": "0.72.10",
+    "@react-native-voice/voice": "^3.4.0",
+    "react-native-tts": "^5.2.0"
+  }
+}
