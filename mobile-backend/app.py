@@ -10,8 +10,10 @@ sys.path.insert(0, ROOT)
 load_dotenv(os.path.join(ROOT, '.env'))
 
 from handlers.ai_handler import handle_query
+from flask_cors import CORS
 
 app = Flask(__name__)
+CORS(app)
 
 @app.route('/ai', methods=['POST'])
 def ai_query():
