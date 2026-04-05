@@ -164,15 +164,33 @@ class VoiceService : Service(), TextToSpeech.OnInitListener {
 
     private fun startListening() {
         if (isSpeaking) return
-        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-            putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
-        }
         
-        // This must run on Main Thread
-        android.os.Handler(android.os.Looper.getMainLooper()).post {
-            speechRecognizer.startListening(intent)
-        }
+        // Use a Handler to delay logic to avoid tight loops that cause beeping
+        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+            try {
+                val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                    putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                    putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+                    // Try to minimize the "beep" by suggesting no sound (only works on some devices)
+                    putExtra("android.speech.extra.DICTATION_MODE", true)
+                }
+
+                // Mute system sounds briefly to hide the 'listening' beep
+                val audioManager = getSystemService(android.content.Context.AUDIO_SERVICE) as android.media.AudioManager
+                audioManager.setStreamVolume(android.media.AudioManager.STREAM_SYSTEM, 0, 0)
+                
+                speechRecognizer.startListening(intent)
+                
+                // Restore volume shortly after
+                android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+                    audioManager.setStreamVolume(android.media.AudioManager.STREAM_SYSTEM, 2, 0)
+                }, 1000)
+                
+            } catch (e: Exception) {
+                Log.e("VoiceService", "Error starting listening", e)
+                startListening() // Retry
+            }
+        }, 1500) // 1.5 second delay between listening sessions stops the 'machine gun' beep
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
