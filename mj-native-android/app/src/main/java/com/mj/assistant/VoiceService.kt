@@ -94,7 +94,22 @@ class VoiceService : Service(), TextToSpeech.OnInitListener {
                         // STATE 2: Processing Command
                         isListeningForCommand = false
                         geminiClient.fetchResponse(heardText) { response ->
-                            speak(response)
+                            var cleanResponse = response
+                            
+                            // Check for ACTION codes
+                            if (response.contains("[ACTION:")) {
+                                val actionMatch = Regex("\\[ACTION:(.*?)\\]").find(response)
+                                val fullAction = actionMatch?.groupValues?.get(1) ?: ""
+                                
+                                // Execute Android action
+                                handleAndroidAction(fullAction)
+                                
+                                // Clean prefix from speaking
+                                cleanResponse = response.replace(Regex("\\[ACTION:.*?\\]"), "").trim()
+                                Log.d("VoiceService", "Action detected: $fullAction")
+                            }
+                            
+                            speak(cleanResponse)
                         }
                     }
                 } else {
@@ -105,6 +120,34 @@ class VoiceService : Service(), TextToSpeech.OnInitListener {
             override fun onPartialResults(partialResults: Bundle?) {}
             override fun onEvent(eventType: Int, params: Bundle?) {}
         })
+    }
+
+    private fun handleAndroidAction(action: String) {
+        try {
+            when {
+                action.startsWith("OPEN_YOUTUBE") -> {
+                    val intent = packageManager.getLaunchIntentForPackage("com.google.android.youtube")
+                    intent?.let { startActivity(it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+                }
+                action.startsWith("OPEN_GOOGLE") -> {
+                    val intent = Intent(Intent.ACTION_MAIN)
+                    intent.addCategory(Intent.CATEGORY_APP_BROWSER)
+                    startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                }
+                action.startsWith("OPEN_WHATSAPP") -> {
+                    val intent = packageManager.getLaunchIntentForPackage("com.whatsapp")
+                    intent?.let { startActivity(it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+                }
+                action.startsWith("SEARCH_WEB:") -> {
+                    val query = action.replace("SEARCH_WEB:", "")
+                    val intent = Intent(Intent.ACTION_WEB_SEARCH)
+                    intent.putExtra(android.app.SearchManager.QUERY, query)
+                    startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+                }
+            }
+        } catch (e: Exception) {
+            Log.e("VoiceService", "Failed to execute action: $action", e)
+        }
     }
 
     private fun speak(text: String) {
