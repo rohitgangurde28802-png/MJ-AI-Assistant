@@ -9,7 +9,7 @@ import java.io.IOException
 class GeminiClient {
     private val client = OkHttpClient()
     // Using the key fetched from previous React Native code
-    private val apiKey = "AIzaSyAtvTzzun1ZDmlYmqfHGq-prfxK1KDacJo"
+    private val apiKey = "AIzaSyDGitz0c_tvAmwqZfFCx3TQX5jkz3Hwbdg"
     private val url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=$apiKey"
 
     fun fetchResponse(prompt: String, callback: (String) -> Unit) {
