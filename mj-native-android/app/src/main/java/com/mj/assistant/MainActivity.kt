@@ -68,7 +68,7 @@ class MainActivity : AppCompatActivity() {
         buildMarvelUI()
         setupCallbacks()
         updateTime()
-        addChat("MJ", "Arc reactor online. All systems nominal. Ready, Mr. Rohit.")
+        addChat("MJ", "System online. Tap the mic or a quick action to begin, Mr. Rohit.")
         setState("idle")
     }
 
@@ -446,7 +446,7 @@ class MainActivity : AppCompatActivity() {
 
     // ── Chat ─────────────────────────────────────────────────────────────────
     private fun addChat(role: String, msg: String) {
-        val prefix = if (role == "MJ") "❯ MJ    : " else "❯ YOU   : "
+        val prefix = if (role == "MJ") "🔵 MJ: " else "⚪ You: "
         chatLog.append("$prefix$msg\n\n")
         tvChat.text = chatLog
         handler.postDelayed({ chatScroll.fullScroll(View.FOCUS_DOWN) }, 80)

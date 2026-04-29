@@ -11,17 +11,18 @@ android {
         applicationId = "com.mj.assistant"
         minSdk = 26
         targetSdk = 34
-        versionCode = 2
-        versionName = "2.0"
+        versionCode = 3
+        versionName = "2.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-        // Gemini API key from gradle.properties or environment
-        buildConfigField(
-            "String",
-            "GEMINI_API_KEY",
-            "\"${project.findProperty("GEMINI_API_KEY") ?: "AIzaSyAjvHXiHJAV0wMUwPSkRWinoK5Tg7cgH04"}\""
-        )
+        // Gemini API key: injected from CI secret or gradle.properties
+        // In CI: set GEMINI_API_KEY as a GitHub Actions secret
+        // Locally: add GEMINI_API_KEY=your_key to mj-native-android/gradle.properties
+        val geminiKey = System.getenv("GEMINI_API_KEY")
+            ?: project.findProperty("GEMINI_API_KEY")?.toString()
+            ?: ""
+        buildConfigField("String", "GEMINI_API_KEY", "\"$geminiKey\"")
     }
 
     buildTypes {

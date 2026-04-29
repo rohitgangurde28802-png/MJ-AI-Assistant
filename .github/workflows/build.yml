@@ -21,6 +21,15 @@ jobs:
           distribution: 'temurin'
           cache: gradle
 
+      - name: Validate Gemini API Key
+        run: |
+          if [ -z "${{ secrets.GEMINI_API_KEY }}" ]; then
+            echo "⚠️  WARNING: GEMINI_API_KEY secret is not set!"
+            echo "The app will use offline fallback mode."
+          else
+            echo "✅ GEMINI_API_KEY is configured"
+          fi
+
       - name: Generate Gradle Wrapper
         working-directory: ./mj-native-android
         run: |
@@ -34,6 +43,17 @@ jobs:
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
 
+      - name: Verify APK was created
+        run: |
+          APK_PATH="mj-native-android/app/build/outputs/apk/debug/app-debug.apk"
+          if [ -f "$APK_PATH" ]; then
+            SIZE=$(du -sh "$APK_PATH" | cut -f1)
+            echo "✅ APK built successfully! Size: $SIZE"
+          else
+            echo "❌ APK file not found!"
+            exit 1
+          fi
+
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
@@ -43,25 +63,34 @@ jobs:
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v2.0.${{ github.run_number }}
-          name: MJ Assistant v2.0.${{ github.run_number }}
+          tag_name: v2.1.${{ github.run_number }}
+          name: "MJ Assistant v2.1.${{ github.run_number }} — Multi-Model Fix"
           body: |
-            ## MJ AI Assistant – Android APK v2.0
-            
-            ### What's New
-            - 🎨 Full Iron Man / Arc Reactor themed UI
-            - 🤖 Gemini 2.0 Flash integration
-            - 🎙️ Female voice (FRIDAY-style)
-            - 📱 15+ app support (YouTube, WhatsApp, Spotify, Maps, etc.)
-            - 💬 Chat transcript with animated orb
+            ## 🤖 MJ AI Assistant v2.1 — Gemini Quota Fix
+
+            ### 🔧 What's Fixed
+            - **Multi-model fallback**: Tries `gemini-2.0-flash` → `gemini-1.5-flash` → `gemini-1.5-flash-8b` → `gemini-1.0-pro` automatically
+            - **No more "thinking limit" errors**: On quota exhaust, instantly switches model
+            - **Smart offline fallback**: App/search commands always work even without internet
+            - **Improved chat UI**: Cleaner message bubbles matching screenshot style
+            - **Auth error recovery**: Graceful fallback if API key is invalid
+
+            ### 📱 Features
+            - 🎨 Iron Man / Arc Reactor themed HUD UI
+            - 🤖 Gemini 2.0 Flash (+ automatic fallback models)
+            - 🎙️ Female voice (warm, confident)
+            - 📱 15+ app actions (YouTube, WhatsApp, Spotify, Maps, etc.)
+            - 💬 Live chat transcript
             - ⌨️ Voice + text input
             - 🔧 Quick action chips
-            
-            ### Install
+
+            ### 📥 Install
             1. Download `app-debug.apk` below
             2. Transfer to your Android phone
-            3. Open the APK and install (enable "Install from unknown sources" if prompted)
-            4. Launch "MJ Assistant" and tap the mic!
+            3. Open the APK → install (enable "Install from unknown sources" if prompted)
+            4. Launch **MJ Assistant** and tap the mic!
+
+            > **Note**: For best AI responses, add your Gemini API key in GitHub Secrets → `GEMINI_API_KEY`
           files: mj-native-android/app/build/outputs/apk/debug/app-debug.apk
           draft: false
           prerelease: false

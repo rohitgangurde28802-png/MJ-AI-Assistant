@@ -10,29 +10,47 @@ import java.io.IOException
 import java.util.concurrent.TimeUnit
 
 /**
- * MJ AI Assistant – Gemini Client v2.2
- * Handles Gemini 2.0 Flash API with retry logic and quota fallback.
+ * MJ AI Assistant – Gemini Client v3.0
+ * Multi-model fallback strategy:
+ *   1. gemini-2.0-flash (primary)
+ *   2. gemini-1.5-flash (secondary – different quota pool)
+ *   3. gemini-1.0-pro  (tertiary)
+ *   4. Smart offline fallback (always works)
+ *
+ * On 429 quota errors, instantly switches model instead of waiting.
+ * On auth/key errors, falls back to smart offline mode.
  */
 class GeminiClient {
 
     companion object {
         private const val TAG = "MJ.Gemini"
-        private const val MAX_RETRIES = 3
-        private const val RETRY_DELAY_MS = 2000L
+        private const val MAX_RETRIES = 2
+        private const val RETRY_DELAY_MS = 1500L
+
+        // Model cascade – if one quota is hit, try the next
+        private val MODELS = listOf(
+            "gemini-2.0-flash",
+            "gemini-1.5-flash",
+            "gemini-1.5-flash-8b",
+            "gemini-1.0-pro"
+        )
+        private const val BASE_URL =
+            "https://generativelanguage.googleapis.com/v1beta/models"
     }
 
     private val client = OkHttpClient.Builder()
-        .connectTimeout(30, TimeUnit.SECONDS)
-        .readTimeout(60, TimeUnit.SECONDS)
-        .writeTimeout(30, TimeUnit.SECONDS)
+        .connectTimeout(25, TimeUnit.SECONDS)
+        .readTimeout(45, TimeUnit.SECONDS)
+        .writeTimeout(25, TimeUnit.SECONDS)
         .build()
 
     private val apiKey = BuildConfig.GEMINI_API_KEY
-    private val model = "gemini-2.0-flash"
-    private val endpoint = "https://generativelanguage.googleapis.com/v1beta/models/$model:generateContent?key=$apiKey"
 
-    // Conversation history for context
+    // Conversation history for multi-turn context
     private val history = mutableListOf<JSONObject>()
+
+    // Track which model index is currently working
+    private var currentModelIndex = 0
 
     private val systemPrompt = """
 You are MJ, a smart and witty personal AI assistant for Mr. Rohit — inspired by Iron Man's AI assistant.
@@ -66,74 +84,115 @@ ALWAYS include a short spoken response AFTER the action tag.
 """.trimIndent()
 
     /**
-     * Send a message and get a response with retry logic.
+     * Main entry point — send a message and get a response.
      */
     fun fetchResponse(userText: String, callback: (String) -> Unit) {
-        sendWithRetry(userText, callback, retryCount = 0)
+        // Quick check: if API key is clearly invalid, go to offline fallback immediately
+        if (apiKey.isBlank() || apiKey == "YOUR_API_KEY_HERE") {
+            Log.w(TAG, "API key not configured — using offline fallback")
+            callback(getOfflineFallback(userText))
+            return
+        }
+        attemptWithModel(userText, callback, modelIndex = currentModelIndex, retryCount = 0)
     }
 
-    private fun sendWithRetry(userText: String, callback: (String) -> Unit, retryCount: Int) {
-        val body = buildRequestBody(userText)
+    private fun attemptWithModel(
+        userText: String,
+        callback: (String) -> Unit,
+        modelIndex: Int,
+        retryCount: Int
+    ) {
+        if (modelIndex >= MODELS.size) {
+            // All models exhausted — use smart offline fallback
+            Log.w(TAG, "All Gemini models exhausted — offline fallback")
+            callback(getOfflineFallback(userText))
+            return
+        }
+
+        val model = MODELS[modelIndex]
+        val endpoint = "$BASE_URL/$model:generateContent?key=$apiKey"
+        val bodyJson = buildRequestBody(userText)
+
         val request = Request.Builder()
             .url(endpoint)
-            .post(body.toString().toRequestBody("application/json".toMediaType()))
+            .post(bodyJson.toString().toRequestBody("application/json".toMediaType()))
             .build()
 
-        Log.d(TAG, "Sending to Gemini (attempt ${retryCount + 1}): $userText")
+        Log.d(TAG, "→ Sending to $model (attempt ${retryCount + 1}): ${userText.take(80)}")
 
         client.newCall(request).enqueue(object : Callback {
             override fun onFailure(call: Call, e: IOException) {
-                Log.e(TAG, "Network error: ${e.message}")
+                Log.e(TAG, "Network error on $model: ${e.message}")
                 if (retryCount < MAX_RETRIES) {
                     Thread.sleep(RETRY_DELAY_MS)
-                    sendWithRetry(userText, callback, retryCount + 1)
+                    attemptWithModel(userText, callback, modelIndex, retryCount + 1)
                 } else {
-                    callback(getFallbackResponse(userText))
+                    // Network failed — try next model
+                    attemptWithModel(userText, callback, modelIndex + 1, 0)
                 }
             }
 
             override fun onResponse(call: Call, response: Response) {
                 val code = response.code
-                val body = response.body?.string()
+                val bodyStr = response.body?.string()
 
                 when {
                     code == 200 -> {
-                        val text = parseGeminiResponse(body)
+                        val text = parseGeminiResponse(bodyStr)
                         if (text != null) {
-                            // Add to history for context
+                            currentModelIndex = modelIndex // Remember working model
                             addToHistory("user", userText)
                             addToHistory("model", text)
+                            Log.d(TAG, "← Response from $model: ${text.take(100)}")
                             callback(text.trim())
                         } else {
-                            callback("I received an empty response. Could you rephrase that?")
+                            // Empty/malformed response — try next model
+                            Log.w(TAG, "Empty response from $model")
+                            attemptWithModel(userText, callback, modelIndex + 1, 0)
                         }
                     }
+
                     code == 429 -> {
-                        Log.w(TAG, "Rate limited (429). Retry $retryCount/$MAX_RETRIES")
-                        if (retryCount < MAX_RETRIES) {
-                            Thread.sleep(RETRY_DELAY_MS * (retryCount + 1))
-                            sendWithRetry(userText, callback, retryCount + 1)
+                        // Quota exceeded — immediately try next model (no point waiting)
+                        Log.w(TAG, "Quota exceeded on $model → trying next model")
+                        attemptWithModel(userText, callback, modelIndex + 1, 0)
+                    }
+
+                    code == 400 -> {
+                        // Bad request — clear history and retry same model once
+                        Log.e(TAG, "Bad request on $model: ${bodyStr?.take(200)}")
+                        history.clear()
+                        if (retryCount < 1) {
+                            attemptWithModel(userText, callback, modelIndex, retryCount + 1)
                         } else {
-                            // After retries, use smart fallback
-                            callback(getFallbackResponse(userText))
+                            attemptWithModel(userText, callback, modelIndex + 1, 0)
                         }
                     }
-                    code == 400 -> {
-                        Log.e(TAG, "Bad request: $body")
-                        history.clear() // Clear history on bad request
-                        callback("Let me reset and try again. What did you need?")
-                    }
+
                     code == 401 || code == 403 -> {
-                        Log.e(TAG, "Auth error: $code")
-                        callback("I'm having authentication issues right now.")
+                        // Auth error — API key problem, go offline
+                        Log.e(TAG, "Auth error ($code) — API key may be invalid")
+                        callback(getOfflineFallback(userText))
                     }
+
+                    code >= 500 -> {
+                        // Server error — retry with backoff, then next model
+                        if (retryCount < MAX_RETRIES) {
+                            Log.w(TAG, "Server error $code on $model — retry ${retryCount + 1}")
+                            Thread.sleep(RETRY_DELAY_MS * (retryCount + 1))
+                            attemptWithModel(userText, callback, modelIndex, retryCount + 1)
+                        } else {
+                            attemptWithModel(userText, callback, modelIndex + 1, 0)
+                        }
+                    }
+
                     else -> {
-                        Log.e(TAG, "Error $code: $body")
+                        Log.e(TAG, "Unexpected $code on $model: ${bodyStr?.take(200)}")
                         if (retryCount < MAX_RETRIES) {
                             Thread.sleep(RETRY_DELAY_MS)
-                            sendWithRetry(userText, callback, retryCount + 1)
+                            attemptWithModel(userText, callback, modelIndex, retryCount + 1)
                         } else {
-                            callback(getFallbackResponse(userText))
+                            attemptWithModel(userText, callback, modelIndex + 1, 0)
                         }
                     }
                 }
@@ -144,8 +203,8 @@ ALWAYS include a short spoken response AFTER the action tag.
     private fun buildRequestBody(userText: String): JSONObject {
         val contents = JSONArray()
 
-        // Add recent history (last 4 exchanges for context)
-        val recentHistory = if (history.size > 8) history.takeLast(8) else history.toList()
+        // Include recent history (last 6 exchanges = 12 messages)
+        val recentHistory = if (history.size > 12) history.takeLast(12) else history.toList()
         recentHistory.forEach { contents.put(it) }
 
         // Add current user message
@@ -170,9 +229,27 @@ ALWAYS include a short spoken response AFTER the action tag.
     private fun parseGeminiResponse(body: String?): String? {
         return try {
             val json = JSONObject(body ?: return null)
+
+            // Check for API-level error
+            if (json.has("error")) {
+                val err = json.getJSONObject("error")
+                Log.e(TAG, "API error: ${err.optString("message")}")
+                return null
+            }
+
             val candidates = json.optJSONArray("candidates") ?: return null
             if (candidates.length() == 0) return null
-            val content = candidates.getJSONObject(0).optJSONObject("content") ?: return null
+
+            val candidate = candidates.getJSONObject(0)
+
+            // Check finish reason
+            val finishReason = candidate.optString("finishReason", "")
+            if (finishReason == "SAFETY" || finishReason == "RECITATION") {
+                Log.w(TAG, "Response blocked: $finishReason")
+                return "I can't respond to that one, but I'm here for anything else!"
+            }
+
+            val content = candidate.optJSONObject("content") ?: return null
             val parts = content.optJSONArray("parts") ?: return null
             if (parts.length() == 0) return null
             parts.getJSONObject(0).optString("text")?.takeIf { it.isNotBlank() }
@@ -187,31 +264,73 @@ ALWAYS include a short spoken response AFTER the action tag.
             put("role", role)
             put("parts", JSONArray().put(JSONObject().put("text", text)))
         })
-        // Keep history bounded
-        if (history.size > 20) history.removeAt(0)
+        // Keep history bounded to last 20 messages
+        while (history.size > 20) history.removeAt(0)
     }
 
     /**
-     * Smart fallback for common commands when AI is unavailable.
+     * Smart offline fallback — handles common commands without AI.
+     * This is the last resort when ALL Gemini models are unavailable.
      */
-    private fun getFallbackResponse(input: String): String {
+    private fun getOfflineFallback(input: String): String {
         val t = input.lowercase().trim()
         return when {
-            "youtube" in t   -> "[ACTION:OPEN_YOUTUBE] Opening YouTube for you!"
-            "whatsapp" in t  -> "[ACTION:OPEN_WHATSAPP] Opening WhatsApp!"
-            "spotify" in t || "music" in t -> "[ACTION:OPEN_SPOTIFY] Opening Spotify!"
-            "instagram" in t -> "[ACTION:OPEN_INSTAGRAM] Opening Instagram!"
-            "maps" in t || "navigate" in t -> "[ACTION:OPEN_MAPS] Opening Maps!"
-            "camera" in t || "photo" in t  -> "[ACTION:OPEN_CAMERA] Opening camera!"
-            "settings" in t  -> "[ACTION:OPEN_SETTINGS] Opening settings!"
-            "weather" in t   -> "[ACTION:SEARCH_WEB:weather today] Checking the weather for you!"
-            "news" in t      -> "[ACTION:SEARCH_WEB:latest news] Getting the latest news!"
-            "time" in t      -> "I don't have clock access right now, but check your status bar!"
-            "joke" in t      -> "Why did the Iron Man suit get a job? Because Tony Stark was tired of doing everything himself!"
-            "hello" in t || "hi" in t || "hey" in t -> "Hey there! MJ at your service. What do you need?"
-            else -> "[ACTION:SEARCH_WEB:${input}] Let me search that for you!"
+            // App launches
+            "youtube" in t         -> "[ACTION:OPEN_YOUTUBE] Opening YouTube for you, Mr. Rohit!"
+            "whatsapp" in t        -> "[ACTION:OPEN_WHATSAPP] Opening WhatsApp!"
+            "spotify" in t || "music" in t -> "[ACTION:OPEN_SPOTIFY] Let's get some music going!"
+            "instagram" in t       -> "[ACTION:OPEN_INSTAGRAM] Opening Instagram!"
+            "maps" in t || "navigate" in t || "direction" in t -> "[ACTION:OPEN_MAPS] Opening Maps — where are we heading?"
+            "camera" in t || "photo" in t || "selfie" in t -> "[ACTION:OPEN_CAMERA] Say cheese!"
+            "settings" in t        -> "[ACTION:OPEN_SETTINGS] Opening device settings."
+            "gmail" in t || "email" in t -> "[ACTION:OPEN_GMAIL] Opening Gmail!"
+            "calendar" in t || "schedule" in t -> "[ACTION:OPEN_CALENDAR] Opening your calendar!"
+            "netflix" in t         -> "[ACTION:OPEN_NETFLIX] Grab some popcorn — opening Netflix!"
+            "facebook" in t        -> "[ACTION:OPEN_FACEBOOK] Opening Facebook!"
+            "phone" in t || "call" in t || "dial" in t -> "[ACTION:OPEN_PHONE] Opening the dialer!"
+
+            // Web searches
+            "weather" in t         -> "[ACTION:SEARCH_WEB:weather today ${extractCity(t)}] Checking the weather for you!"
+            "news" in t            -> "[ACTION:SEARCH_WEB:latest news today] Fetching the latest headlines!"
+            "cricket" in t         -> "[ACTION:SEARCH_WEB:cricket score today] Getting the cricket scores!"
+            "stock" in t || "market" in t -> "[ACTION:SEARCH_WEB:stock market today] Checking the markets!"
+
+            // Time / Date
+            "time" in t            -> "Check the top of your screen for the time, Mr. Rohit!"
+            "date" in t || "today" in t -> "Check your status bar for today's date!"
+
+            // Greetings
+            "hello" in t || "hi" in t || "hey" in t || "sup" in t ->
+                "Hey, Mr. Rohit! MJ at your service. What do you need?"
+            "how are you" in t || "how r u" in t ->
+                "Systems are green and I'm ready to help! What can I do for you?"
+
+            // Fun
+            "joke" in t ->
+                "Why did Tony Stark build an AI assistant? Because even billionaires need a second opinion!"
+            "sing" in t || "song" in t ->
+                "[ACTION:OPEN_SPOTIFY] I'll let the experts handle the singing — opening Spotify!"
+
+            // Default: search for it
+            else -> "[ACTION:SEARCH_WEB:${input.take(100)}] Let me search that for you, Mr. Rohit!"
         }
     }
 
-    fun clearHistory() { history.clear() }
+    /** Extract a city name from a weather query if present. */
+    private fun extractCity(text: String): String {
+        val keywords = listOf("in ", "at ", "for ")
+        for (kw in keywords) {
+            val idx = text.indexOf(kw)
+            if (idx >= 0) {
+                val city = text.substring(idx + kw.length).trim()
+                if (city.isNotBlank() && city != "weather") return city
+            }
+        }
+        return ""
+    }
+
+    fun clearHistory() {
+        history.clear()
+        currentModelIndex = 0 // Reset model to primary on clear
+    }
 }
