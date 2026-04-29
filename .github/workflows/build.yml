@@ -1,0 +1,69 @@
+name: Build MJ Assistant APK
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: gradle
+
+      - name: Generate Gradle Wrapper
+        working-directory: ./mj-native-android
+        run: |
+          gradle wrapper --gradle-version 8.5 --no-daemon
+
+      - name: Build APK
+        working-directory: ./mj-native-android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: mj-assistant-debug
+          path: mj-native-android/app/build/outputs/apk/debug/app-debug.apk
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v2.0.${{ github.run_number }}
+          name: MJ Assistant v2.0.${{ github.run_number }}
+          body: |
+            ## MJ AI Assistant – Android APK v2.0
+            
+            ### What's New
+            - 🎨 Full Iron Man / Arc Reactor themed UI
+            - 🤖 Gemini 2.0 Flash integration
+            - 🎙️ Female voice (FRIDAY-style)
+            - 📱 15+ app support (YouTube, WhatsApp, Spotify, Maps, etc.)
+            - 💬 Chat transcript with animated orb
+            - ⌨️ Voice + text input
+            - 🔧 Quick action chips
+            
+            ### Install
+            1. Download `app-debug.apk` below
+            2. Transfer to your Android phone
+            3. Open the APK and install (enable "Install from unknown sources" if prompted)
+            4. Launch "MJ Assistant" and tap the mic!
+          files: mj-native-android/app/build/outputs/apk/debug/app-debug.apk
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

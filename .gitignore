@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+dist/
+build/
+*.egg
+.env
+venv/
+.venv/
+
+# Android
+mj-native-android/.gradle/
+mj-native-android/build/
+mj-native-android/app/build/
+mj-native-android/local.properties
+*.apk
+*.aab
+
+# IDE
+.idea/
+.vscode/
+*.iml
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+logs/
+*.log
+
+# Node (legacy)
+node_modules/
+.expo/
+.metro-cache/
+
+# Misc
+*.zip

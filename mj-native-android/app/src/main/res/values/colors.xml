@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- MJ Arc Reactor Theme Colors -->
+    <color name="bg_dark">#050510</color>
+    <color name="bg_card">#0D1117</color>
+    <color name="bg_card_border">#1C2333</color>
+    <color name="arc_cyan">#00F0FF</color>
+    <color name="arc_cyan_dim">#0088AA</color>
+    <color name="arc_gold">#C9A84C</color>
+    <color name="arc_gold_dim">#8B7533</color>
+    <color name="text_primary">#F5F5F7</color>
+    <color name="text_secondary">#86868B</color>
+    <color name="text_mono">#6E7681</color>
+    <color name="error_red">#FF2A2A</color>
+    <color name="success_green">#00FA9A</color>
+    <color name="thinking_purple">#B026FF</color>
+    <color name="speaking_amber">#FFB800</color>
+    <color name="listening_green">#00FA9A</color>
+    <color name="chip_bg">#141922</color>
+    <color name="chip_border">#2A3142</color>
+    <color name="user_bubble_bg">#0A1628</color>
+    <color name="user_bubble_border">#1A3050</color>
+    <color name="mj_bubble_bg">#141418</color>
+    <color name="mj_bubble_border">#2A2A30</color>
+    <color name="mic_fab_default">#F5F5F7</color>
+    <color name="mic_fab_listening">#FF2A2A</color>
+    <color name="status_bar">#030308</color>
+</resources>

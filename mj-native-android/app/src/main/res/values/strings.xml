@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">MJ Assistant</string>
+    <string name="status_online">SYS.STATUS // ONLINE</string>
+    <string name="status_offline">SYS.STATUS // OFFLINE</string>
+    <string name="state_idle">I AM HERE</string>
+    <string name="state_listening">LISTENING</string>
+    <string name="state_thinking">THINKING</string>
+    <string name="state_speaking">SPEAKING</string>
+    <string name="state_error">ERROR</string>
+    <string name="mj_label">MJ</string>
+    <string name="hint_placeholder">Tap mic to talk or type a command…</string>
+    <string name="hint_text_input">Type a command…</string>
+    <string name="greeting">MJ online. All systems operational.</string>
+    <string name="chip_youtube">YouTube</string>
+    <string name="chip_weather">Weather</string>
+    <string name="chip_news">News</string>
+    <string name="chip_maps">Maps</string>
+    <string name="chip_time">Time</string>
+    <string name="chip_calendar">Calendar</string>
+    <string name="notification_title">MJ Assistant</string>
+    <string name="notification_text">MJ is running in the background</string>
+</resources>
