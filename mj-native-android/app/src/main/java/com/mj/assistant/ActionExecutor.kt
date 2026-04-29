@@ -2,143 +2,93 @@ package com.mj.assistant
 
 import android.content.Context
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.net.Uri
 import android.provider.MediaStore
 import android.util.Log
 
-/**
- * MJ AI Assistant – Action Executor
- * Handles all device-level actions: opening apps, dialing, searching, etc.
- */
 object ActionExecutor {
+    private const val TAG = "MJ.Action"
 
-    private const val TAG = "ActionExecutor"
-
-    // Map of known apps to their package names
-    private val APP_PACKAGES = mapOf(
-        "YOUTUBE" to "com.google.android.youtube",
-        "WHATSAPP" to "com.whatsapp",
-        "SPOTIFY" to "com.spotify.music",
-        "INSTAGRAM" to "com.instagram.android",
-        "FACEBOOK" to "com.facebook.katana",
-        "TWITTER" to "com.twitter.android",
-        "GMAIL" to "com.google.android.gm",
-        "MAPS" to "com.google.android.apps.maps",
-        "CHROME" to "com.android.chrome",
-        "CALENDAR" to "com.google.android.calendar",
-        "CAMERA" to null,  // uses intent
-        "SETTINGS" to null,  // uses intent
-        "PHONE" to null,  // uses intent
-    )
-
-    /**
-     * Execute an action parsed from Gemini's response.
-     * @return A spoken message to confirm the action.
-     */
     fun execute(context: Context, action: String, target: String? = null): String {
-        Log.d(TAG, "Executing action: $action, target: $target")
-
+        Log.d(TAG, "Action=$action target=$target")
         return try {
-            when {
-                action.startsWith("OPEN_") -> handleOpenApp(context, action.removePrefix("OPEN_"))
-                action.startsWith("SEARCH_WEB") -> handleWebSearch(context, target ?: "")
-                action.startsWith("PLAY_MUSIC") -> handlePlayMusic(context, target ?: "")
-                else -> "I don't know how to do that yet."
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Action failed: $action", e)
-            "I had trouble doing that. ${e.message}"
-        }
-    }
-
-    private fun handleOpenApp(context: Context, appName: String): String {
-        val name = appName.uppercase()
-
-        // Special intents
-        when (name) {
-            "CAMERA" -> {
-                val intent = Intent(MediaStore.ACTION_IMAGE_CAPTURE)
-                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                context.startActivity(intent)
-                return "Opening camera."
-            }
-            "SETTINGS" -> {
-                val intent = Intent(android.provider.Settings.ACTION_SETTINGS)
-                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                context.startActivity(intent)
-                return "Opening settings."
-            }
-            "PHONE" -> {
-                val intent = Intent(Intent.ACTION_DIAL)
-                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                context.startActivity(intent)
-                return "Opening phone dialer."
-            }
-            "GOOGLE" -> {
-                // Try Chrome first, then default browser
-                val chromeIntent = context.packageManager.getLaunchIntentForPackage("com.android.chrome")
-                if (chromeIntent != null) {
-                    chromeIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    context.startActivity(chromeIntent)
-                } else {
-                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://www.google.com"))
-                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                    context.startActivity(intent)
+            when (action.uppercase().trim()) {
+                "OPEN_YOUTUBE"    -> launch(context, "com.google.android.youtube") ?: openUrl(context, "https://youtube.com")
+                "OPEN_WHATSAPP"   -> launch(context, "com.whatsapp") ?: openUrl(context, "https://web.whatsapp.com")
+                "OPEN_SPOTIFY"    -> launch(context, "com.spotify.music") ?: openUrl(context, "https://open.spotify.com")
+                "OPEN_INSTAGRAM"  -> launch(context, "com.instagram.android") ?: openUrl(context, "https://instagram.com")
+                "OPEN_GMAIL"      -> launch(context, "com.google.android.gm") ?: "Gmail not installed"
+                "OPEN_MAPS"       -> openUrl(context, "geo:0,0?q=")
+                "OPEN_CAMERA"     -> openCamera(context)
+                "OPEN_SETTINGS"   -> openSettings(context)
+                "OPEN_PHONE"      -> openDialer(context)
+                "OPEN_CALENDAR"   -> launch(context, "com.google.android.calendar") ?: "Calendar not found"
+                "OPEN_GOOGLE"     -> openUrl(context, "https://www.google.com")
+                "OPEN_FACEBOOK"   -> launch(context, "com.facebook.katana") ?: openUrl(context, "https://facebook.com")
+                "OPEN_TWITTER"    -> launch(context, "com.twitter.android") ?: openUrl(context, "https://twitter.com")
+                "OPEN_NETFLIX"    -> launch(context, "com.netflix.mediaclient") ?: openUrl(context, "https://netflix.com")
+                "SEARCH_WEB"      -> searchWeb(context, target ?: "")
+                "PLAY_MUSIC"      -> playMusic(context, target ?: "")
+                else -> {
+                    // Try smart fallback: treat action as app name
+                    val appName = action.replace("OPEN_", "").replace("_", " ").lowercase()
+                    searchWeb(context, "$appName app")
                 }
-                return "Opening Google."
             }
-            "MAPS" -> {
-                val intent = Intent(Intent.ACTION_VIEW, Uri.parse("geo:0,0"))
-                intent.setPackage("com.google.android.apps.maps")
-                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                context.startActivity(intent)
-                return "Opening Maps."
-            }
-        }
-
-        // Package-based launch
-        val packageName = APP_PACKAGES[name]
-        if (packageName != null) {
-            val intent = context.packageManager.getLaunchIntentForPackage(packageName)
-            if (intent != null) {
-                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                context.startActivity(intent)
-                return "Opening ${name.lowercase().replaceFirstChar { it.uppercase() }}."
-            }
-        }
-
-        // Fallback: search for the app
-        val searchIntent = Intent(Intent.ACTION_VIEW,
-            Uri.parse("https://www.google.com/search?q=${name.lowercase()}+app"))
-        searchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        context.startActivity(searchIntent)
-        return "I couldn't find ${name.lowercase()} directly, so I searched for it."
-    }
-
-    private fun handleWebSearch(context: Context, query: String): String {
-        val intent = Intent(Intent.ACTION_VIEW,
-            Uri.parse("https://www.google.com/search?q=${Uri.encode(query)}"))
-        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        context.startActivity(intent)
-        return "Searching the web for $query."
-    }
-
-    private fun handlePlayMusic(context: Context, song: String): String {
-        // Try Spotify first
-        try {
-            val intent = Intent(Intent.ACTION_VIEW,
-                Uri.parse("spotify:search:${Uri.encode(song)}"))
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            context.startActivity(intent)
-            return "Playing $song on Spotify."
         } catch (e: Exception) {
-            // Fallback to YouTube search
-            val intent = Intent(Intent.ACTION_VIEW,
-                Uri.parse("https://www.youtube.com/results?search_query=${Uri.encode(song)}"))
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            context.startActivity(intent)
-            return "Searching for $song on YouTube."
+            Log.e(TAG, "Action failed: ${e.message}")
+            "Action failed: ${e.message}"
         }
+    }
+
+    private fun launch(ctx: Context, pkg: String): String? {
+        return try {
+            val intent = ctx.packageManager.getLaunchIntentForPackage(pkg) ?: return null
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            ctx.startActivity(intent)
+            "Opened."
+        } catch (e: Exception) { null }
+    }
+
+    private fun openUrl(ctx: Context, url: String): String {
+        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        ctx.startActivity(intent)
+        return "Opened."
+    }
+
+    private fun searchWeb(ctx: Context, query: String): String {
+        val uri = Uri.parse("https://www.google.com/search?q=${Uri.encode(query)}")
+        val intent = Intent(Intent.ACTION_VIEW, uri).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
+        ctx.startActivity(intent)
+        return "Searching for $query."
+    }
+
+    private fun playMusic(ctx: Context, song: String): String {
+        return try {
+            val intent = Intent(Intent.ACTION_VIEW, Uri.parse("spotify:search:${Uri.encode(song)}")).apply {
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            ctx.startActivity(intent)
+            "Playing $song on Spotify."
+        } catch (e: Exception) {
+            searchWeb(ctx, "$song song youtube")
+        }
+    }
+
+    private fun openCamera(ctx: Context): String {
+        val intent = Intent(MediaStore.ACTION_IMAGE_CAPTURE).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
+        ctx.startActivity(intent); return "Opening camera."
+    }
+
+    private fun openSettings(ctx: Context): String {
+        val intent = Intent(android.provider.Settings.ACTION_SETTINGS).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
+        ctx.startActivity(intent); return "Opening settings."
+    }
+
+    private fun openDialer(ctx: Context): String {
+        val intent = Intent(Intent.ACTION_DIAL).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
+        ctx.startActivity(intent); return "Opening dialer."
     }
 }
