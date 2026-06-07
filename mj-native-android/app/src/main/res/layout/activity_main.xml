@@ -42,6 +42,7 @@
             android:layout_height="36dp"
             android:background="@drawable/circle_btn_bg"
             android:src="@android:drawable/ic_menu_manage"
+            android:tint="@color/arc_cyan"
             android:contentDescription="Settings"
             android:padding="8dp"
             android:scaleType="centerInside" />
@@ -254,6 +255,7 @@
                 android:layout_height="38dp"
                 android:background="@drawable/send_btn_bg"
                 android:src="@android:drawable/ic_menu_send"
+                android:tint="@color/bg_dark"
                 android:contentDescription="Send"
                 android:padding="8dp"
                 android:scaleType="centerInside" />
@@ -265,6 +267,7 @@
                 android:layout_marginStart="6dp"
                 android:background="@drawable/circle_btn_bg"
                 android:src="@android:drawable/ic_menu_close_clear_cancel"
+                android:tint="@color/arc_cyan"
                 android:contentDescription="Close keyboard"
                 android:padding="8dp"
                 android:scaleType="centerInside" />
@@ -287,6 +290,7 @@
                 android:layout_height="48dp"
                 android:background="@drawable/circle_btn_bg"
                 android:src="@android:drawable/ic_menu_edit"
+                android:tint="@color/arc_cyan"
                 android:contentDescription="Toggle keyboard"
                 android:padding="12dp"
                 android:scaleType="centerInside" />
@@ -335,6 +339,7 @@
                 android:layout_height="48dp"
                 android:background="@drawable/circle_btn_bg"
                 android:src="@android:drawable/ic_menu_close_clear_cancel"
+                android:tint="@color/error_red"
                 android:contentDescription="Cancel"
                 android:padding="12dp"
                 android:scaleType="centerInside" />
