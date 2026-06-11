@@ -170,6 +170,7 @@ class MainActivity : AppCompatActivity() {
         btnCancel.setOnClickListener {
             val i = Intent(this@MainActivity, VoiceService::class.java)
             stopService(i)
+            JarvisSoundManager.playStandbyChime()
             setState("idle")
         }
 
@@ -434,6 +435,7 @@ class MainActivity : AppCompatActivity() {
     private fun submitText(text: String) {
         addChat("YOU", text)
         setState("thinking")
+        JarvisSoundManager.playConfirmChime()
         gemini.fetchResponse(this, text) { resp ->
             handler.post {
                 var clean = resp
@@ -442,11 +444,24 @@ class MainActivity : AppCompatActivity() {
                     val full = m?.groupValues?.get(1) ?: ""
                     val action = if (":" in full) full.substringBefore(":") else full
                     val target = if (":" in full) full.substringAfter(":") else null
-                    try { ActionExecutor.execute(this@MainActivity, action.trim(), target?.trim()) }
-                    catch (e: Exception) { Log.e(TAG, "Action err: ${e.message}") }
+                    var actionResult = ""
+                    try {
+                        actionResult = ActionExecutor.execute(this@MainActivity, action.trim(), target?.trim())
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Action err: ${e.message}")
+                        actionResult = "Action error: ${e.message}"
+                    }
                     clean = resp.replace(Regex("\\[ACTION:[^\\]]+\\]\\s*"), "").trim()
+                    if (actionResult.isNotEmpty()) {
+                        clean = if (clean.isNotEmpty()) {
+                            "$clean\n\n$actionResult"
+                        } else {
+                            actionResult
+                        }
+                    }
                 }
                 addChat("MJ", clean)
+                JarvisSoundManager.playStandbyChime()
                 setState("idle")
             }
         }

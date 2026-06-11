@@ -11,6 +11,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 import config
@@ -103,6 +104,13 @@ async def api_execute_tool(tool_name: str, arguments: dict | None = None):
     if result is None:
         raise HTTPException(status_code=400, detail=f"Tool {tool_name} failed or not found")
     return {"result": result}
+
+
+# ── Serve Web Frontend ───────────────────────────────────────────────────────
+
+frontend_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "frontend")
+if os.path.exists(frontend_dir):
+    app.mount("/", StaticFiles(directory=frontend_dir, html=True), name="frontend")
 
 
 # ── Startup ──────────────────────────────────────────────────────────────────

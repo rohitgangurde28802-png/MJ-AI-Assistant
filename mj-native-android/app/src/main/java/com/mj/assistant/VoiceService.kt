@@ -175,6 +175,7 @@ class VoiceService : Service(), TextToSpeech.OnInitListener {
                             heardText.contains("hey m j")) {
 
                             isListeningForCommand = true
+                            JarvisSoundManager.playWakeChime()
                             onStateChanged?.invoke("listening", null)
                             speak("What can I do for you?")
                         } else {
@@ -183,6 +184,7 @@ class VoiceService : Service(), TextToSpeech.OnInitListener {
                     } else {
                         // STATE 2: Processing Command
                         isListeningForCommand = false
+                        JarvisSoundManager.playConfirmChime()
                         onStateChanged?.invoke("thinking", heardText)
 
                         geminiClient.fetchResponse(this@VoiceService, heardText) { response ->
@@ -224,10 +226,17 @@ class VoiceService : Service(), TextToSpeech.OnInitListener {
 
             // Execute the action
             Log.d(TAG, "Action: $action, Target: $target")
-            ActionExecutor.execute(this, action, target)
+            val actionResult = ActionExecutor.execute(this, action, target)
 
             // Clean ACTION tag from spoken response
             cleanResponse = response.replace(Regex("\\[ACTION:[^\\]]+\\]\\s*"), "").trim()
+            if (actionResult.isNotEmpty()) {
+                cleanResponse = if (cleanResponse.isNotEmpty()) {
+                    "$cleanResponse\n\n$actionResult"
+                } else {
+                    actionResult
+                }
+            }
         }
 
         // Notify UI
@@ -242,6 +251,7 @@ class VoiceService : Service(), TextToSpeech.OnInitListener {
      * Process a text command directly (from keyboard input).
      */
     fun processTextCommand(text: String) {
+        JarvisSoundManager.playConfirmChime()
         onStateChanged?.invoke("thinking", text)
         geminiClient.fetchResponse(this, text) { response ->
             processGeminiResponse(text, response)
@@ -260,6 +270,7 @@ class VoiceService : Service(), TextToSpeech.OnInitListener {
             }
             isSpeaking = false
             if (!isDestroyed) {
+                JarvisSoundManager.playStandbyChime()
                 onStateChanged?.invoke("idle", null)
                 restartListening()
             }
@@ -343,6 +354,7 @@ class VoiceService : Service(), TextToSpeech.OnInitListener {
         val directListen = intent?.getBooleanExtra("EXTRA_DIRECT_LISTEN", false) ?: false
         if (directListen) {
             isListeningForCommand = true
+            JarvisSoundManager.playWakeChime()
             onStateChanged?.invoke("listening", null)
             stopSpeaking()
             startListening()

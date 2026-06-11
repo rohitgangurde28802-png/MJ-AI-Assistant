@@ -75,11 +75,19 @@ When you need to open an app or perform a device action, put the ACTION TAG at t
 [ACTION:OPEN_NETFLIX] — open Netflix
 [ACTION:SEARCH_WEB:your query] — search Google
 [ACTION:PLAY_MUSIC:your query] — play on Spotify
+[ACTION:TOGGLE_FLASHLIGHT:ON/OFF] — turn the camera flashlight ON or OFF
+[ACTION:GET_BATTERY] — get current battery percentage
+[ACTION:VOLUME_CONTROL:UP/DOWN/MUTE] — turn system music volume UP, DOWN, or MUTE it
+[ACTION:RUN_DIAGNOSTIC] — run full suit diagnostic system scan (RAM, storage, network status)
 
 Examples:
 - "open youtube" → [ACTION:OPEN_YOUTUBE] Opening YouTube for you!
 - "search cats" → [ACTION:SEARCH_WEB:cats] Searching for cats!
 - "play Shape of You" → [ACTION:PLAY_MUSIC:Shape of You] Playing that for you!
+- "turn on flashlight" → [ACTION:TOGGLE_FLASHLIGHT:ON] Powering on flashlight.
+- "check battery" → [ACTION:GET_BATTERY] Reading current power grid capacity.
+- "volume up" → [ACTION:VOLUME_CONTROL:UP] Increasing audio gain.
+- "run system diagnostic" → [ACTION:RUN_DIAGNOSTIC] Stand by, initiating full suit diagnostic scan.
 - "tell me a joke" → (no action tag) Why don't scientists trust atoms? Because they make up everything!
 
 ALWAYS include a short spoken response AFTER the action tag.
@@ -283,6 +291,27 @@ ALWAYS include a short spoken response AFTER the action tag.
     private fun getOfflineFallback(input: String): String {
         val t = input.lowercase().trim()
         return when {
+            // JARVIS hardware control fallbacks
+            "flashlight" in t || "torch" in t -> {
+                when {
+                    "on" in t || "activate" in t -> "[ACTION:TOGGLE_FLASHLIGHT:ON] Powering on flashlight."
+                    "off" in t || "deactivate" in t -> "[ACTION:TOGGLE_FLASHLIGHT:OFF] Powering off flashlight."
+                    else -> "[ACTION:TOGGLE_FLASHLIGHT:TOGGLE] Toggling flashlight."
+                }
+            }
+            "battery" in t || "power grid" in t || "charge" in t ->
+                "[ACTION:GET_BATTERY] Reading current power grid capacity."
+            "diagnostic" in t || "system check" in t || "scan" in t ->
+                "[ACTION:RUN_DIAGNOSTIC] Stand by, initiating full suit diagnostic scan."
+            "volume" in t || "sound" in t || "mute" in t || "silent" in t -> {
+                when {
+                    "up" in t || "increase" in t || "louder" in t || "raise" in t -> "[ACTION:VOLUME_CONTROL:UP] Increasing audio gain."
+                    "down" in t || "decrease" in t || "quieter" in t || "lower" in t -> "[ACTION:VOLUME_CONTROL:DOWN] Decreasing audio gain."
+                    "mute" in t || "silent" in t || "silence" in t -> "[ACTION:VOLUME_CONTROL:MUTE] Muting audio output."
+                    else -> "[ACTION:VOLUME_CONTROL:UP] Adjusting volume."
+                }
+            }
+
             // App launches
             "youtube" in t         -> "[ACTION:OPEN_YOUTUBE] Opening YouTube for you, Mr. Rohit!"
             "whatsapp" in t        -> "[ACTION:OPEN_WHATSAPP] Opening WhatsApp!"

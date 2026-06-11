@@ -29,6 +29,10 @@ object ActionExecutor {
                 "OPEN_NETFLIX"    -> launch(context, "com.netflix.mediaclient") ?: openUrl(context, "https://netflix.com")
                 "SEARCH_WEB"      -> searchWeb(context, target ?: "")
                 "PLAY_MUSIC"      -> playMusic(context, target ?: "")
+                "TOGGLE_FLASHLIGHT" -> toggleFlashlight(context, target ?: "")
+                "GET_BATTERY"       -> getBatteryLevel(context)
+                "VOLUME_CONTROL"    -> controlVolume(context, target ?: "")
+                "RUN_DIAGNOSTIC"    -> runDiagnostic(context)
                 else -> {
                     // Try smart fallback: treat action as app name
                     val appName = action.replace("OPEN_", "").replace("_", " ").lowercase()
@@ -90,5 +94,98 @@ object ActionExecutor {
     private fun openDialer(ctx: Context): String {
         val intent = Intent(Intent.ACTION_DIAL).apply { addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
         ctx.startActivity(intent); return "Opening dialer."
+    }
+
+    private var isFlashlightOn = false
+
+    private fun toggleFlashlight(ctx: Context, state: String): String {
+        return try {
+            val cameraManager = ctx.getSystemService(Context.CAMERA_SERVICE) as android.hardware.camera2.CameraManager
+            val cameraId = cameraManager.cameraIdList.firstOrNull() ?: return "No camera flash found."
+            val turnOn = when (state.uppercase().trim()) {
+                "ON" -> true
+                "OFF" -> false
+                else -> !isFlashlightOn
+            }
+            cameraManager.setTorchMode(cameraId, turnOn)
+            isFlashlightOn = turnOn
+            if (turnOn) "Flashlight activated, Mr. Rohit." else "Flashlight deactivated."
+        } catch (e: Exception) {
+            "Flashlight error: ${e.message}"
+        }
+    }
+
+    private fun getBatteryLevel(ctx: Context): String {
+        return try {
+            val bm = ctx.getSystemService(Context.BATTERY_SERVICE) as android.os.BatteryManager
+            val pct = bm.getIntProperty(android.os.BatteryManager.BATTERY_PROPERTY_CAPACITY)
+            "Power grid status: $pct% capacity remaining, Mr. Rohit."
+        } catch (e: Exception) {
+            "Battery check failed: ${e.message}"
+        }
+    }
+
+    private fun controlVolume(ctx: Context, command: String): String {
+        return try {
+            val am = ctx.getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager
+            val stream = android.media.AudioManager.STREAM_MUSIC
+            val max = am.getStreamMaxVolume(stream)
+            val current = am.getStreamVolume(stream)
+            
+            when (command.uppercase().trim()) {
+                "UP" -> {
+                    val next = (current + (max / 10)).coerceAtMost(max)
+                    am.setStreamVolume(stream, next, android.media.AudioManager.FLAG_SHOW_UI)
+                    "Volume increased to ${((next.toFloat() / max) * 100).toInt()}%."
+                }
+                "DOWN" -> {
+                    val next = (current - (max / 10)).coerceAtLeast(0)
+                    am.setStreamVolume(stream, next, android.media.AudioManager.FLAG_SHOW_UI)
+                    "Volume decreased to ${((next.toFloat() / max) * 100).toInt()}%."
+                }
+                "MUTE" -> {
+                    am.setStreamVolume(stream, 0, android.media.AudioManager.FLAG_SHOW_UI)
+                    "Volume muted."
+                }
+                else -> "Invalid volume command."
+            }
+        } catch (e: Exception) {
+            "Volume control failed: ${e.message}"
+        }
+    }
+
+    private fun runDiagnostic(ctx: Context): String {
+        return try {
+            val bm = ctx.getSystemService(Context.BATTERY_SERVICE) as android.os.BatteryManager
+            val battery = bm.getIntProperty(android.os.BatteryManager.BATTERY_PROPERTY_CAPACITY)
+            
+            val mi = android.app.ActivityManager.MemoryInfo()
+            val am = ctx.getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager
+            am.getMemoryInfo(mi)
+            val freeRamPct = ((mi.availMem.toFloat() / mi.totalMem) * 100).toInt()
+            
+            val stat = android.os.StatFs(android.os.Environment.getDataDirectory().path)
+            val freeStoragePct = ((stat.availableBlocksLong.toFloat() / stat.blockCountLong) * 100).toInt()
+            
+            val network = if (isNetworkAvailable(ctx)) "Green" else "Offline"
+            
+            """
+            === MJ SYSTEM DIAGNOSTIC ===
+            ◈ Core Model: Gemini 2.0 Flash
+            ◈ Power Grid: $battery% capacity (Stable)
+            ◈ Memory Alloc: $freeRamPct% RAM free
+            ◈ Storage Block: $freeStoragePct% space free
+            ◈ Network Node: $network
+            ◈ All systems operational, Mr. Rohit.
+            """.trimIndent()
+        } catch (e: Exception) {
+            "Diagnostic scan failed: ${e.message}"
+        }
+    }
+
+    private fun isNetworkAvailable(ctx: Context): Boolean {
+        val cm = ctx.getSystemService(Context.CONNECTIVITY_SERVICE) as android.net.ConnectivityManager
+        val active = cm.activeNetworkInfo
+        return active != null && active.isConnected
     }
 }
